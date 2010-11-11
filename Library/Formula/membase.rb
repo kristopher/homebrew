@@ -1,9 +1,9 @@
 require 'formula'
 
 class Membase < Formula
-  url 'http://membase.org/downloads/membase_1.6.0beta2-18-g638fc06_src.tar.gz'
+  url 'http://c2512712.cdn.cloudfiles.rackspacecloud.com/membase-server-community_1.6.0.1_src.tar.gz'
   homepage 'http://membase.org'
-  md5 'b0b2a5d909cf3d2e20db07c4d12259a0'
+  md5 '74c9f4ff4d91dc9b45dca9eabfb9e041'
 
   # build
   depends_on 'check'
@@ -16,9 +16,9 @@ class Membase < Formula
   depends_on 'sprockets' => :ruby
 
   # runtime
-  depends_on 'python'
+  depends_on 'python'  
   depends_on 'erlang'
-
+  
   def caveats
     <<-EOS.undent
       If this is your first install, automatically load on login with:
@@ -49,18 +49,11 @@ class Membase < Formula
   end
 
   def verify_dependencies
-    if Formula.factory("moxi").installed? || Formula.factory("memcached").installed? || Formula.factory("libmemcached").installed?
-      onoe "The membase forumla conflicts with some existing forumla"
-      puts <<-EOS.undent
-        Please remove them:
-
-          brew remove moxi
-          brew remove memcached
-          brew remove libmemcached
-      EOS
+    erlang = Formula.factory('erlang')
+    if erlang.version != 'R13B04'
+      puts %Q{Requires erlang version R13B04 using version #{erlang.version}}
       exit 99
     end
-
     python = Formula.factory("python")
     unless python.installed?
       onoe "The \"membase\" brew is only meant to be used against a Homebrew-built Python."
@@ -73,119 +66,29 @@ class Membase < Formula
   end
 
   def install
-
     verify_dependencies
-
-    # Easier to replicate the makefile myself
-    Dir.chdir 'memcached' do
-      ohai 'Installing memcached'
-      system './config/autorun.sh'
-      system "./configure --prefix=#{prefix} --enable-isasl"
-      system 'make'
-      system 'make install'
-    end
-    Dir.chdir 'bucket_engine' do
-      ohai 'Installing bucket_engine'
-      system "./configure --prefix=#{prefix} --with-memcached=../memcached"
-      system 'make'
-      system 'make install'
-    end
-    Dir.chdir 'ep-engine' do
-      ohai 'Installing ep-engine'
-      system './config/autorun.sh'
-      system "./configure --prefix=#{prefix} --with-memcached=../memcached"
-      system 'make'
-      system 'make install'
-    end
-    Dir.chdir 'libmemcached' do
-      ohai 'Installing libmemcached'
-      system "./configure --prefix=#{prefix} --with-memcached=../memcached/memcached"
-      system 'make'
-      system 'make install'
-    end
-    Dir.chdir 'libvbucket' do
-      ohai 'Installing libvbucket'
-      system './config/autorun.sh'
-      system "./configure --prefix=#{prefix} --disable-shared"
-      system 'make'
-      system 'make install'
-    end
-    Dir.chdir 'vbucketmigrator' do
-      ohai 'Installing vbucketmigrator'
-      system './config/autorun.sh'
-      system "./configure --prefix=#{prefix} --with-memcached=../memcached --with-libvbucket-prefix=#{prefix}"
-      system 'make'
-      system 'make install'
-    end
-    Dir.chdir 'libconflate' do
-      ohai 'Installing libconflate'
-      system "./configure --prefix=#{prefix} --without-shared --with-rest=yes --with-sqlite=no --with-bundled-libstrophe=no --with-check=no"
-      system 'make'
-      system 'make install'
-    end
-    Dir.chdir 'moxi' do
-      ohai 'Installing moxi'
-      system './config/autorun.sh'
-      system "./configure --prefix=#{prefix} --with-libconflate=have CFLAGS='-I../lib/include -I../lib/include/libconflate -I#{include} -I#{include}/libconflate' LDFLAGS='-L#{lib} -lconflate'"
-      system 'make'
-      system 'make install'
-    end
-    Dir.chdir 'ns_server' do
-      ohai 'Installing ns_server'
-      system 'make'
-    end
-
-    # install libs and bins hidden in odd places
-    lib.install     Dir["**/*.so*"]
-    lib.install     Dir["**/.libs/*"]
-
-    # Install the python management libraries
-    # FIXME: these should be installed to the proper python places
-    (prefix+'ep-engine').install Dir['ep-engine/management']
-    prefix.install Dir['membase-cli']
-
-    # fixup the ns_server symlinks to point to things in #{prefix}
-    %w(
-    ns_server/bin/bucket_engine/bucket_engine.so
-    ns_server/bin/ep_engine/ep.so
-    ns_server/bin/memcached/default_engine.so
-    ns_server/bin/memcached/stdin_term_handler.so
-    ).each do |symlinked_so|
-      rm symlinked_so rescue nil
-      ln_s(lib+File.basename(symlinked_so), symlinked_so)
-    end
-
-    %w(
-    ns_server/bin/moxi/moxi
-    ns_server/bin/memcached/memcached
-    ns_server/bin/port_adaptor/port_adaptor
-    ns_server/bin/vbucketmigrator/vbucketmigrator
-    ).each do |symlinked_bin|
-      rm symlinked_bin rescue nil
-      ln_s(bin+File.basename(symlinked_bin), symlinked_bin)
-    end
-
-    prefix.install  Dir["ns_server"]
-
-    # shim scripts, because start.sh doesn't make sense in PATH
+    system 'make'
+    # system "mv ./* #{prefix}"    
+    prefix.install Dir['**']
     (bin+'ns_server').write <<-EOS.undent
       #!/bin/bash
       export PATH="$PATH:#{bin}:#{HOMEBREW_PREFIX}/bin"
       #{prefix}/ns_server/start.sh $@
     EOS
-
+    
     (bin+'ns_server_shell').write <<-EOS.undent
       #!/bin/bash
       export PATH="$PATH:#{bin}:#{HOMEBREW_PREFIX}/bin"
       #{prefix}/ns_server/start_shell.sh $@
     EOS
-
+    
     system "chmod +x #{bin}/*"
-
+    
     (var+'log/membase').mkpath
     touch log_file
-
+    
     (prefix+'com.northscale.membase.plist').write startup_plist
+    
   end
 
   def log_file
